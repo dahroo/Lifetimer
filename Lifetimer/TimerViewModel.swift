@@ -9,20 +9,30 @@ class TimerViewModel: ObservableObject {
     private var targetDate: Date?
     private let persistenceService = PersistenceService()
 
-    // Callbacks to update the UI in AppDelegate
+    // Callbacks to update the UI in the App struct
     var onTimeUpdate: ((String) -> Void)?
     var onTimerFinished: (() -> Void)?
 
-    init() {
-        // Load the target date from persistence and configure the timer.
-        loadTargetDate()
+    // We no longer need the init() to load the date,
+    // as the .task modifier will call a dedicated function.
+
+    /// This is called from the .task modifier to set the initial state.
+    func initializeTimerState() {
+        if let savedDate = persistenceService.loadTargetDate() {
+            targetDate = savedDate
+            isTimerRunning = true
+            setupTimer()
+            updateCountdown() // Call once immediately to set the initial text
+        } else {
+            isTimerRunning = false
+            onTimeUpdate?("") // Ensure the hourglass is shown initially
+        }
     }
 
     /// Starts the countdown timer based on the number of years provided.
     func startTimer(years: Double) {
         let calendar = Calendar.current
         if let date = calendar.date(byAdding: .year, value: Int(years), to: Date()) {
-            // Calculate seconds for fractional part of the year
             let remainingSeconds = (years - Double(Int(years))) * 365.25 * 24 * 60 * 60
             targetDate = calendar.date(byAdding: .second, value: Int(remainingSeconds), to: date)
             
@@ -41,22 +51,12 @@ class TimerViewModel: ObservableObject {
         targetDate = nil
         persistenceService.clearTargetDate()
         isTimerRunning = false
-        // Restore initial icon
-        onTimeUpdate?("") // Clear title
-        // You might need a more direct way to reset the icon if onTimeUpdate doesn't handle it
-    }
-
-    /// Loads the target date from persistence and sets up the timer if a date is found.
-    private func loadTargetDate() {
-        if let savedDate = persistenceService.loadTargetDate() {
-            targetDate = savedDate
-            isTimerRunning = true
-            setupTimer()
-        }
+        onTimeUpdate?("") // Use the callback to reset the UI to the icon
     }
 
     /// Sets up and starts the `Timer` instance.
     private func setupTimer() {
+        timer?.invalidate() // Ensure no duplicate timers are running
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.updateCountdown()
         }
